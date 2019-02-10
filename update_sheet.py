@@ -195,6 +195,3 @@ def update_sheet(year, season, data):
 
     sorted_data = update_anime_names(service, spreadsheet_id, sheet_name, data)
     update_anime_stats(service, spreadsheet_id, sheet_name, sorted_data)
-
-# data_example = [('Tate no Yuusha no Nariagari', '221,720', '8.50', 'TV ', 'Sun, 2019-02-10 14:49:41'), ('Mob Psycho 100 II', '195,409', '8.76', 'TV ', 'Sun, 2019-02-10 14:49:41'), ('Mr. Shadow', '77', 'N/A', 'TV ', 'Sun, 2019-02-10 14:49:41')]
-# main('2019', 'winter', data_example)

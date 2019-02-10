@@ -2,6 +2,15 @@ import requests as r
 from bs4 import BeautifulSoup
 from time import gmtime, strftime
 
+def get_default_season():
+    mal_site = "https://myanimelist.net/anime/season"
+    mal_request = r.get(mal_site)
+    soup = BeautifulSoup(mal_request.text, 'html.parser')
+    title = soup.title.text.strip().split(' ')
+    season = title[0].lower()
+    year = title[1]
+    return year, season
+
 def get_stats(year, season):
     now = strftime("%a, %Y-%m-%d %H:%M:%S", gmtime())
     mal_site = "https://myanimelist.net/anime/season/%s/%s" %(year, season)
