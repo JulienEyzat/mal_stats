@@ -5,6 +5,9 @@ from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
+# The name of the spreadsheet if created
+SPREADSHEET_DEFAULT_TITLE = 'mal_stats'
+
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
@@ -38,7 +41,7 @@ def get_service():
 def create_spreadsheet(service, sheet_name):
     spreadsheet = {
         'properties': {
-            'title': 'mal_stats'
+            'title': SPREADSHEET_DEFAULT_TITLE
         },
         'sheets': [
             {
@@ -170,6 +173,28 @@ def update_anime_stats(service, spreadsheet_id, sheet_name, sorted_data):
     }
     result = service.spreadsheets().values().update(spreadsheetId=spreadsheet_id, range=range, valueInputOption=value_input_option, body=body).execute()
     print('{0} cells updated.'.format(result.get('updatedCells')))
+
+    # Merge the date cell with the one below
+    result = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    for sheet in result['sheets']:
+        if sheet_name == sheet['properties']['title']:
+            sheet_id = sheet['properties']['sheetId']
+    body = {
+        "requests": [{
+            "mergeCells": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": row_index - 1,
+                    "endRowIndex": row_index + 1,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": 1
+                },
+                "mergeType": 'MERGE_ALL'
+            }
+        }]
+    }
+    print(row_index)
+    result = service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
 
     # Update the scores and members
     members = [ i[1] for i in sorted_data ]
