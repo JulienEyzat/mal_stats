@@ -1,6 +1,7 @@
 from __future__ import print_function
 import pickle
 import os.path
+import string
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -16,6 +17,15 @@ GS_PATH = 'GS_resources/'
 TOKEN_PATH = GS_PATH + 'token.pickle'
 CREDENTIALS_PATH = GS_PATH + 'credentials.json'
 SPREADSHEET_ID_PATH = GS_PATH + 'spreadsheet_id'
+
+# Default values for columns and rows
+COLUMN_DATE = 'A'
+COLUMN_STATS_BEGIN = 'B'
+COLUMN_ANIME_NAMES_BEGIN = 'B'
+ROW_ANIME_NAMES = 1
+ROW_STATS_BEGIN = 2
+
+NUMBER_ROWS_DATE = 2
 
 def get_service():
     creds = None
@@ -95,11 +105,18 @@ def num_to_col_letters(num):
         num = (num - 1) // 26
     return ''.join(reversed(letters))
 
+def col_letters_to_num(col):
+    num = 0
+    for c in col:
+        if c in string.ascii_letters:
+            num = num * 26 + (ord(c.upper()) - ord('A')) + 1
+    return num
+
 def update_anime_names(service, spreadsheet_id, sheet_name, data):
     # Create a list with the anime names from the mal request
     mr_anime_names = [ i[0] for i in data ]
     # Create a list with the anime names from the google sheet
-    range = '%s!B1:1' %(sheet_name)
+    range = '%s!%s%s:%s' %(sheet_name, COLUMN_ANIME_NAMES_BEGIN, ROW_ANIME_NAMES, ROW_ANIME_NAMES)
     result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=range).execute()
     if result.get('values'):
         gs_anime_names = result.get('values')[0]
@@ -114,7 +131,7 @@ def update_anime_names(service, spreadsheet_id, sheet_name, data):
             sorted_data.append(data[mr_anime_names.index(anime_name)])
         # Anime name only in google sheet
         else:
-            empty_tuple = ('',) * len(data[0])
+            empty_tuple = ('', '', '', '', data[0][4])
             sorted_data.append(empty_tuple)
     # Anime name only in mal request
     if len(sorted_data) != len(mr_anime_names):
@@ -129,7 +146,7 @@ def update_anime_names(service, spreadsheet_id, sheet_name, data):
         # 2 because we begin at B
         col_begin = num_to_col_letters(len(gs_anime_names)+2)
         col_end = num_to_col_letters(len(gs_anime_names)+1+len(new_anime_names))
-        range = '%s!%s1:%s1' %(sheet_name, col_begin, col_end)
+        range = '%s!%s%s:%s%s' %(sheet_name, col_begin, ROW_ANIME_NAMES, col_end, ROW_ANIME_NAMES)
         value_input_option = 'RAW'
         body = {
             'values': [
@@ -144,27 +161,22 @@ def update_anime_names(service, spreadsheet_id, sheet_name, data):
 
 def update_anime_stats(service, spreadsheet_id, sheet_name, sorted_data):
     # Get the list of dates already done
-    range = '%s!A2:A' %(sheet_name)
+    range = '%s!%s%s:%s' %(sheet_name, COLUMN_DATE, ROW_STATS_BEGIN, COLUMN_DATE)
     result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=range).execute()
     dates = result.get('values', [])
     # We flatten the dates list
-    flat_dates = []
-    for date in dates:
-        if len(date):
-            flat_dates.append(date[0])
-        else:
-            flat_dates.append('')
+    flat_dates = [date for sub_dates in dates for date in sub_dates]
     current_date = sorted_data[0][4].split(', ')[1].split(' ')[0]
 
     # We get the row where the stats must be put
     row_index = 0
     if current_date in flat_dates:
-        row_index = 2 + flat_dates.index(current_date)
+        row_index = NUMBER_ROWS_DATE * (flat_dates.index(current_date) + 1)
     if not row_index:
-        row_index = len(dates) + 3
+        row_index = NUMBER_ROWS_DATE * (len(flat_dates) + 1)
 
     # Update the date in the google sheet
-    range = '%s!A%s:A%s' %(sheet_name, row_index, row_index)
+    range = '%s!%s%s:%s%s' %(sheet_name, COLUMN_DATE, row_index, COLUMN_DATE, row_index)
     value_input_option = 'USER_ENTERED'
     body = {
         'values': [
@@ -180,27 +192,46 @@ def update_anime_stats(service, spreadsheet_id, sheet_name, sorted_data):
         if sheet_name == sheet['properties']['title']:
             sheet_id = sheet['properties']['sheetId']
     body = {
-        "requests": [{
-            "mergeCells": {
-                "range": {
-                    "sheetId": sheet_id,
-                    "startRowIndex": row_index - 1,
-                    "endRowIndex": row_index + 1,
-                    "startColumnIndex": 0,
-                    "endColumnIndex": 1
-                },
-                "mergeType": 'MERGE_ALL'
+        "requests": [
+            {
+                "mergeCells": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": row_index - 1,
+                        "endRowIndex": row_index + 1,
+                        "startColumnIndex": col_letters_to_num(COLUMN_DATE) - 1,
+                        "endColumnIndex": col_letters_to_num(COLUMN_DATE)
+                    },
+                    "mergeType": 'MERGE_ALL'
+                }
+            },
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": row_index - 1,
+                        "endRowIndex": row_index + 1,
+                        "startColumnIndex": col_letters_to_num(COLUMN_DATE) - 1,
+                        "endColumnIndex": col_letters_to_num(COLUMN_DATE)
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "horizontalAlignment": "CENTER",
+                            "verticalAlignment": "MIDDLE"
+                        }
+                    },
+                    "fields": "userEnteredFormat(horizontalAlignment, verticalAlignment)"
+                }
             }
-        }]
+        ]
     }
-    print(row_index)
     result = service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
 
     # Update the scores and members
     members = [ i[1] for i in sorted_data ]
     scores = [ i[2] for i in sorted_data ]
     col_end = num_to_col_letters(len(sorted_data)+2)
-    range = '%s!B%s:%s%s' %(sheet_name, row_index, col_end, row_index + 1)
+    range = '%s!%s%s:%s%s' %(sheet_name, COLUMN_STATS_BEGIN, row_index, col_end, row_index + 1)
     value_input_option = 'RAW'
     body = {
         'values': [
