@@ -8,7 +8,7 @@ mal-stats - A tool to automatically make statistics from myanimelist.net seasona
 
 # INSTALLATION
 
-To have the program working, you need to go on this page : https://developers.google.com/sheets/api/quickstart/python and click on the button "ENABLE THE GOOGLE SHEET API". Then, you just need to put the file `credentials.json` in a `GS_resources` directory (to create next to the mal-stats.py file).
+To have the program working, you need to go on this page : https://developers.google.com/sheets/api/quickstart/python and click on the button "ENABLE THE GOOGLE SHEET API". Then, you just need to put the file `credentials.json` in a `GS_resources` directory.
 
 To install all the libraries the program needs, launch this command :
 
