@@ -24,9 +24,9 @@ def get_stats(year, season, type):
     for i in soup.find_all("a", attrs={"class":"link-image"}):
         animes_names.append(i.text)
     for i in soup.find_all("span", attrs={"title":"Members"}):
-        animes_members.append(i.text.strip())
+        animes_members.append(i.text.strip().replace(',', ''))
     for i in soup.find_all("span", attrs={"title":"Score"}):
-        animes_scores.append(i.text.strip())
+        animes_scores.append(i.text.strip().replace('.', ','))
     for i in soup.find_all("div", attrs={"class":"info"}):
         animes_type.append(i.text.strip().split("-")[0].strip())
 

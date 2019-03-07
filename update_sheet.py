@@ -232,7 +232,7 @@ def update_anime_stats(service, spreadsheet_id, sheet_name, sorted_data):
     scores = [ i[2] for i in sorted_data ]
     col_end = num_to_col_letters(len(sorted_data)+2)
     range = '%s!%s%s:%s%s' %(sheet_name, COLUMN_STATS_BEGIN, row_index, col_end, row_index + 1)
-    value_input_option = 'RAW'
+    value_input_option = 'USER_ENTERED'
     body = {
         'values': [
             members,
