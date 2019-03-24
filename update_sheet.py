@@ -13,7 +13,8 @@ SPREADSHEET_DEFAULT_TITLE = 'mal_stats'
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
 # Path to Google Spreadsheet resources
-GS_PATH = 'GS_resources/'
+PROJECT_PATH = os.path.dirname(os.path.abspath(__file__))
+GS_PATH = PROJECT_PATH + '/GS_resources/'
 TOKEN_PATH = GS_PATH + 'token.pickle'
 CREDENTIALS_PATH = GS_PATH + 'credentials.json'
 SPREADSHEET_ID_PATH = GS_PATH + 'spreadsheet_id'
