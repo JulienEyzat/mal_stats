@@ -47,7 +47,9 @@ def get_service():
         with open(TOKEN_PATH, 'wb') as token:
             pickle.dump(creds, token)
 
-    return build('sheets', 'v4', credentials=creds)
+    service = build('sheets', 'v4', credentials=creds)
+    
+    return service
 
 def create_spreadsheet(service, sheet_name):
     spreadsheet = {
