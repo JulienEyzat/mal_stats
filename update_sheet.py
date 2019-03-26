@@ -26,7 +26,8 @@ COLUMN_ANIME_NAMES_BEGIN = 'B'
 ROW_ANIME_NAMES = 1
 ROW_STATS_BEGIN = 2
 
-NUMBER_ROWS_DATE = 2
+NUMBER_ROWS_DATE = 1
+NUMBER_COLUMNS_ANIME_NAMES = 2
 
 def get_service():
     creds = None
@@ -48,7 +49,7 @@ def get_service():
             pickle.dump(creds, token)
 
     service = build('sheets', 'v4', credentials=creds)
-    
+
     return service
 
 def create_spreadsheet(service, sheet_name):
@@ -92,6 +93,128 @@ def create_sheet(service, spreadsheet_id, sheet_name):
     }
     result = service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
 
+def get_sheet_id(service, spreadsheet_id, sheet_name=None, chart_name=None):
+    result = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    if sheet_name:
+        for sheet in result['sheets']:
+            if sheet_name == sheet['properties']['title']:
+                sheet_id = sheet['properties']['sheetId']
+    elif chart_name:
+        for sheet in result['sheets']:
+            if 'charts' in sheet.keys():
+                for chart in sheet['charts']:
+                    if 'title' in chart['spec'].keys():
+                        if chart_name == chart['spec']['title']:
+                            sheet_id = sheet['properties']['sheetId']
+    return sheet_id
+
+def get_chart_id(service, spreadsheet_id, chart_name):
+    result = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    for sheet in result['sheets']:
+        if 'charts' in sheet.keys():
+            for chart in sheet['charts']:
+                if 'title' in chart['spec'].keys():
+                    if chart_name == chart['spec']['title']:
+                        chart_id = chart['chartId']
+    return chart_id
+
+def is_chart(service, spreadsheet_id, source_sheet_name, graph_type):
+    graph_name = "%s_%s" %(source_sheet_name, graph_type)
+    result = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    for sheet in result['sheets']:
+        if graph_name == sheet['properties']['title']:
+            return True
+    return False
+
+def create_charts(service, spreadsheet_id, source_sheet_name, graph_type):
+    graph_name = "%s_%s" %(source_sheet_name, graph_type)
+    source_sheet_id = get_sheet_id(service, spreadsheet_id, source_sheet_name)
+    graph_title = "Variation of %s in %s" %(graph_type, source_sheet_name)
+    request = {
+      "requests": [
+        {
+          "addChart": {
+            "chart": {
+              "spec": {
+                "title": graph_title,
+                "basicChart": {
+                  "chartType": "LINE",
+                  "legendPosition": "RIGHT_LEGEND",
+                  "axis": [
+                    {
+                      "position": "BOTTOM_AXIS",
+                      "title": "Dates"
+                    },
+                    {
+                      "position": "LEFT_AXIS",
+                      "title": graph_type
+                    }
+                  ],
+                  "domains": [
+                    {
+                      "domain": {
+                        "sourceRange": {
+                          "sources": [
+                            {
+                              "sheetId": source_sheet_id,
+                              "startRowIndex": 0,
+                              "endRowIndex": 1,
+                              "startColumnIndex": 0,
+                              "endColumnIndex": 1
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ],
+                  "series": [
+                    {
+                      "series": {
+                        "sourceRange": {
+                          "sources": [
+                            {
+                              "sheetId": source_sheet_id,
+                              "startRowIndex": 1,
+                              "endRowIndex": 2,
+                              "startColumnIndex": 1,
+                              "endColumnIndex": 2
+                            }
+                          ]
+                        }
+                      },
+                      "targetAxis": "LEFT_AXIS"
+                    },
+                  ]
+                }
+              },
+              "position": {
+                "newSheet": "true"
+              }
+            }
+          }
+        }
+      ]
+    }
+    result = service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=request).execute()
+
+    # Update the name of the sheet
+    graph_sheet_id = get_sheet_id(service, spreadsheet_id, chart_name=graph_title)
+    request = {
+        "requests": [
+            {
+                "updateSheetProperties": {
+                    "properties": {
+                        "sheetId": graph_sheet_id,
+                        "title": graph_name
+                    },
+                    "fields": "title"
+                }
+            }
+        ]
+    }
+    result = service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=request).execute()
+
+
 def is_new_season(service, spreadsheet_id, sheet_name):
     result = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
     is_new = True
@@ -119,10 +242,14 @@ def update_anime_names(service, spreadsheet_id, sheet_name, data):
     # Create a list with the anime names from the mal request
     mr_anime_names = [ i[0] for i in data ]
     # Create a list with the anime names from the google sheet
-    range = '%s!%s%s:%s' %(sheet_name, COLUMN_ANIME_NAMES_BEGIN, ROW_ANIME_NAMES, ROW_ANIME_NAMES)
-    result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=range).execute()
+    sheet_range = '%s!%s%s:%s' %(sheet_name, COLUMN_ANIME_NAMES_BEGIN, ROW_ANIME_NAMES, ROW_ANIME_NAMES)
+    result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=sheet_range).execute()
     if result.get('values'):
-        gs_anime_names = result.get('values')[0]
+        tmp_gs_anime_names = result.get('values')[0]
+        gs_anime_names = []
+        for i in range(len(tmp_gs_anime_names)):
+            if i%NUMBER_COLUMNS_ANIME_NAMES==0:
+                gs_anime_names.append(tmp_gs_anime_names[i])
     else:
         gs_anime_names = []
 
@@ -143,20 +270,22 @@ def update_anime_names(service, spreadsheet_id, sheet_name, data):
         for anime_name in mr_anime_names:
             if anime_name not in gs_anime_names:
                 sorted_data.append(data[mr_anime_names.index(anime_name)])
+                # We add the names two times because there are two columns for each anime
+                new_anime_names.append(anime_name)
                 new_anime_names.append(anime_name)
 
         # Add the new anime names in the google sheet
         # 2 because we begin at B
-        col_begin = num_to_col_letters(len(gs_anime_names)+2)
-        col_end = num_to_col_letters(len(gs_anime_names)+1+len(new_anime_names))
-        range = '%s!%s%s:%s%s' %(sheet_name, col_begin, ROW_ANIME_NAMES, col_end, ROW_ANIME_NAMES)
+        col_begin = num_to_col_letters(col_letters_to_num(COLUMN_ANIME_NAMES_BEGIN) + NUMBER_COLUMNS_ANIME_NAMES * len(gs_anime_names))
+        col_end = num_to_col_letters(col_letters_to_num(COLUMN_ANIME_NAMES_BEGIN) + NUMBER_COLUMNS_ANIME_NAMES * len(gs_anime_names) + NUMBER_COLUMNS_ANIME_NAMES * len(new_anime_names) + 1)
+        sheet_range = '%s!%s%s:%s%s' %(sheet_name, col_begin, ROW_ANIME_NAMES, col_end, ROW_ANIME_NAMES)
         value_input_option = 'RAW'
         body = {
             'values': [
                 new_anime_names
             ]
         }
-        result = service.spreadsheets().values().update(spreadsheetId=spreadsheet_id, range=range, valueInputOption=value_input_option, body=body).execute()
+        result = service.spreadsheets().values().append(spreadsheetId=spreadsheet_id, range=sheet_range, valueInputOption=value_input_option, body=body).execute()
         print('{0} cells updated.'.format(result.get('updatedCells')))
 
     # Return the data sorted for the coming update of data
@@ -164,8 +293,8 @@ def update_anime_names(service, spreadsheet_id, sheet_name, data):
 
 def update_anime_stats(service, spreadsheet_id, sheet_name, sorted_data):
     # Get the list of dates already done
-    range = '%s!%s%s:%s' %(sheet_name, COLUMN_DATE, ROW_STATS_BEGIN, COLUMN_DATE)
-    result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=range).execute()
+    sheet_range = '%s!%s%s:%s' %(sheet_name, COLUMN_DATE, ROW_STATS_BEGIN, COLUMN_DATE)
+    result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=sheet_range).execute()
     dates = result.get('values', [])
     # We flatten the dates list
     flat_dates = [date for sub_dates in dates for date in sub_dates]
@@ -174,40 +303,25 @@ def update_anime_stats(service, spreadsheet_id, sheet_name, sorted_data):
     # We get the row where the stats must be put
     row_index = 0
     if current_date in flat_dates:
-        row_index = NUMBER_ROWS_DATE * (flat_dates.index(current_date) + 1)
+        row_index = NUMBER_ROWS_DATE * (flat_dates.index(current_date) + 1) + 1
     if not row_index:
-        row_index = NUMBER_ROWS_DATE * (len(flat_dates) + 1)
+        row_index = NUMBER_ROWS_DATE * (len(flat_dates) + 1) + 1
 
     # Update the date in the google sheet
-    range = '%s!%s%s:%s%s' %(sheet_name, COLUMN_DATE, row_index, COLUMN_DATE, row_index)
+    sheet_range = '%s!%s%s:%s%s' %(sheet_name, COLUMN_DATE, row_index, COLUMN_DATE, row_index)
     value_input_option = 'USER_ENTERED'
     body = {
         'values': [
             [current_date]
         ]
     }
-    result = service.spreadsheets().values().update(spreadsheetId=spreadsheet_id, range=range, valueInputOption=value_input_option, body=body).execute()
+    result = service.spreadsheets().values().update(spreadsheetId=spreadsheet_id, range=sheet_range, valueInputOption=value_input_option, body=body).execute()
     print('{0} cells updated.'.format(result.get('updatedCells')))
 
     # Merge the date cell with the one below
-    result = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-    for sheet in result['sheets']:
-        if sheet_name == sheet['properties']['title']:
-            sheet_id = sheet['properties']['sheetId']
+    sheet_id = get_sheet_id(service, spreadsheet_id, sheet_name)
     body = {
         "requests": [
-            {
-                "mergeCells": {
-                    "range": {
-                        "sheetId": sheet_id,
-                        "startRowIndex": row_index - 1,
-                        "endRowIndex": row_index + 1,
-                        "startColumnIndex": col_letters_to_num(COLUMN_DATE) - 1,
-                        "endColumnIndex": col_letters_to_num(COLUMN_DATE)
-                    },
-                    "mergeType": 'MERGE_ALL'
-                }
-            },
             {
                 "repeatCell": {
                     "range": {
@@ -233,17 +347,106 @@ def update_anime_stats(service, spreadsheet_id, sheet_name, sorted_data):
     # Update the scores and members
     members = [ i[1] for i in sorted_data ]
     scores = [ i[2] for i in sorted_data ]
-    col_end = num_to_col_letters(len(sorted_data)+2)
-    range = '%s!%s%s:%s%s' %(sheet_name, COLUMN_STATS_BEGIN, row_index, col_end, row_index + 1)
+    members_scores=[]
+    for i in range(len(members)):
+        members_scores.append(members[i])
+        members_scores.append(scores[i])
+    col_end = num_to_col_letters(col_letters_to_num(COLUMN_ANIME_NAMES_BEGIN) + NUMBER_COLUMNS_ANIME_NAMES * len(sorted_data))
+    sheet_range = '%s!%s%s:%s%s' %(sheet_name, COLUMN_STATS_BEGIN, row_index, col_end, row_index + 1)
     value_input_option = 'USER_ENTERED'
     body = {
         'values': [
-            members,
-            scores
+            members_scores
         ]
     }
-    result = service.spreadsheets().values().update(spreadsheetId=spreadsheet_id, range=range, valueInputOption=value_input_option, body=body).execute()
+    result = service.spreadsheets().values().update(spreadsheetId=spreadsheet_id, range=sheet_range, valueInputOption=value_input_option, body=body).execute()
     print('{0} cells updated.'.format(result.get('updatedCells')))
+
+def update_charts(service, spreadsheet_id, source_sheet_name, anime_number, graph_type):
+    graph_title = "Variation of %s in %s" %(graph_type, source_sheet_name)
+    source_sheet_id = get_sheet_id(service, spreadsheet_id, source_sheet_name)
+    graph_sheet_id = get_chart_id(service, spreadsheet_id, graph_title)
+    series = []
+    if graph_type == "members":
+        for i in range(anime_number):
+            series.append({
+              "series": {
+                "sourceRange": {
+                  "sources": [
+                    {
+                      "sheetId": source_sheet_id,
+                      "startRowIndex": 0,
+                      "startColumnIndex": i*NUMBER_COLUMNS_ANIME_NAMES + 1,
+                      "endColumnIndex": i*NUMBER_COLUMNS_ANIME_NAMES + 2
+                    }
+                  ]
+                }
+              },
+              "targetAxis": "LEFT_AXIS"
+            })
+    elif graph_type == "notes":
+        for i in range(anime_number):
+            series.append({
+              "series": {
+                "sourceRange": {
+                  "sources": [
+                    {
+                      "sheetId": source_sheet_id,
+                      "startRowIndex": 0,
+                      "startColumnIndex": i*NUMBER_COLUMNS_ANIME_NAMES + 2,
+                      "endColumnIndex": i*NUMBER_COLUMNS_ANIME_NAMES + 3
+                    }
+                  ]
+                }
+              },
+              "targetAxis": "LEFT_AXIS"
+            })
+
+    # We create the request
+    request = {
+      "requests": [
+        {
+          "updateChartSpec": {
+            "chartId": graph_sheet_id,
+            "spec": {
+              "title": graph_title,
+              "basicChart": {
+                "chartType": "LINE",
+                "legendPosition": "RIGHT_LEGEND",
+                "axis": [
+                  {
+                    "position": "BOTTOM_AXIS",
+                    "title": "Dates"
+                  },
+                  {
+                    "position": "LEFT_AXIS",
+                    "title": graph_type
+                  }
+                ],
+                "domains": [
+                  {
+                    "domain": {
+                      "sourceRange": {
+                        "sources": [
+                          {
+                            "sheetId": source_sheet_id,
+                            "startRowIndex": 0,
+                            "startColumnIndex": 0,
+                            "endColumnIndex": 1
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ],
+                "series": series
+              }
+            }
+          }
+        }
+      ]
+    }
+    result = service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=request).execute()
 
 def update_sheet(year, season, data):
     service = get_service()
@@ -254,3 +457,9 @@ def update_sheet(year, season, data):
 
     sorted_data = update_anime_names(service, spreadsheet_id, sheet_name, data)
     update_anime_stats(service, spreadsheet_id, sheet_name, sorted_data)
+    if not is_chart(service, spreadsheet_id, sheet_name, "members"):
+        create_charts(service, spreadsheet_id, sheet_name, "members")
+    if not is_chart(service, spreadsheet_id, sheet_name, "notes"):
+        create_charts(service, spreadsheet_id, sheet_name, "notes")
+    update_charts(service, spreadsheet_id, sheet_name, len(sorted_data), "members")
+    update_charts(service, spreadsheet_id, sheet_name, len(sorted_data), "notes")
