@@ -21,7 +21,7 @@ def is_internet(host="8.8.8.8", port=53, timeout=3, testing_time=60, sleep_time=
                 time.sleep(sleep_time)
 
 if not is_internet():
-    print("No internet connexion found")
+    print("No internet connexion found", file=sys.stderr)
     sys.exit(1)
 
 default_year, default_season = ms.get_default_season()
