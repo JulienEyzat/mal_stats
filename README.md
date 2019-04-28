@@ -29,9 +29,12 @@ Then, it puts the information in a google spreadsheet called `mal_stats`. It cre
 - `--season {winter,spring,summer,fall}` : The season.
 - `--year <year>` : This option allows you to select the year.
 - `--type {TV,ONA,OVA,Movie,Special,All} [{TV,ONA,OVA,Movie,Special,All} ...]` : The type(s) of animes to get from mal.
+- `--database {google,sqlite}` : This option allows you to choose if you want to save the data in a Google Spreadsheet or a local sqlite database.
+- `--transfert {google,sqlite} {google,sqlite}` : Allows to transfer the data in one database to the other one. Useful if you want to store the data in a Google Spreadsheet and want to play with the data locally with pandas for example.
 
 # FUTUR
 
 - Finish the README.md
 - Better template
 - Add automatic calculation of some stats (variation of members...)
+- Better system of charts

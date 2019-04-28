@@ -240,7 +240,7 @@ def col_letters_to_num(col):
 
 def update_anime_names(service, spreadsheet_id, sheet_name, data):
     # Create a list with the anime names from the mal request
-    mr_anime_names = [ i[0] for i in data ]
+    mr_anime_names = [ i['anime_name'] for i in data ]
     # Create a list with the anime names from the google sheet
     sheet_range = '%s!%s%s:%s' %(sheet_name, COLUMN_ANIME_NAMES_BEGIN, ROW_ANIME_NAMES, ROW_ANIME_NAMES)
     result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=sheet_range).execute()
@@ -261,7 +261,7 @@ def update_anime_names(service, spreadsheet_id, sheet_name, data):
             sorted_data.append(data[mr_anime_names.index(anime_name)])
         # Anime name only in google sheet
         else:
-            empty_tuple = ('', '', '', '', data[0][4])
+            empty_tuple = {'date':data[0]['date'], 'anime_name':'', 'anime_members':'', 'anime_score':''}
             sorted_data.append(empty_tuple)
     # Anime name only in mal request
     if len(sorted_data) != len(mr_anime_names):
@@ -298,7 +298,7 @@ def update_anime_stats(service, spreadsheet_id, sheet_name, sorted_data):
     dates = result.get('values', [])
     # We flatten the dates list
     flat_dates = [date for sub_dates in dates for date in sub_dates]
-    current_date = sorted_data[0][4].split(', ')[1].split(' ')[0]
+    current_date = sorted_data[0]['date']
 
     # We get the row where the stats must be put
     row_index = 0
@@ -345,8 +345,8 @@ def update_anime_stats(service, spreadsheet_id, sheet_name, sorted_data):
     result = service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
 
     # Update the scores and members
-    members = [ i[1] for i in sorted_data ]
-    scores = [ i[2] for i in sorted_data ]
+    members = [ i['anime_members'] for i in sorted_data ]
+    scores = [ i['anime_score'] for i in sorted_data ]
     members_scores=[]
     for i in range(len(members)):
         members_scores.append(members[i])
@@ -457,9 +457,9 @@ def update_sheet(year, season, data):
 
     sorted_data = update_anime_names(service, spreadsheet_id, sheet_name, data)
     update_anime_stats(service, spreadsheet_id, sheet_name, sorted_data)
-    if not is_chart(service, spreadsheet_id, sheet_name, "members"):
-        create_charts(service, spreadsheet_id, sheet_name, "members")
-    if not is_chart(service, spreadsheet_id, sheet_name, "notes"):
-        create_charts(service, spreadsheet_id, sheet_name, "notes")
-    update_charts(service, spreadsheet_id, sheet_name, len(sorted_data), "members")
-    update_charts(service, spreadsheet_id, sheet_name, len(sorted_data), "notes")
+    # if not is_chart(service, spreadsheet_id, sheet_name, "members"):
+    #     create_charts(service, spreadsheet_id, sheet_name, "members")
+    # if not is_chart(service, spreadsheet_id, sheet_name, "notes"):
+    #     create_charts(service, spreadsheet_id, sheet_name, "notes")
+    # update_charts(service, spreadsheet_id, sheet_name, len(sorted_data), "members")
+    # update_charts(service, spreadsheet_id, sheet_name, len(sorted_data), "notes")
